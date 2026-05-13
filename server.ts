@@ -353,9 +353,8 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
   app.use(verify.jwtChallenges()) // vuln-code-snippet hide-line
   /* Baskets: Unauthorized users are not allowed to access baskets */
   app.use('/rest/basket', security.isAuthorized(), security.appendUserId())
-  /* BasketItems: API only accessible for authenticated users */
-  app.use('/api/BasketItems', security.isAuthorized())
-  app.use('/api/BasketItems/:id', security.isAuthorized())
+  /* BasketItems: API only accessible for authenticated users; rows scoped to session basket */
+  app.use('/api/BasketItems', security.isAuthorized(), utils.asyncHandler(security.assertBasketOwnsBasketItems()))
   /* Feedbacks: GET allowed for feedback carousel, POST allowed in order to provide feedback without being logged in */
   app.use('/api/Feedbacks/:id', security.isAuthorized())
   /* Users: Only POST is allowed in order to register a new user */
@@ -395,8 +394,8 @@ function configureApp (app: ReturnType<typeof express>, seq: typeof sequelize) {
   app.use('/api/SecurityAnswers/:id', security.denyAll())
   /* REST API */
   app.use('/rest/user/authentication-details', security.isAuthorized())
-  app.use('/rest/basket/:id', security.isAuthorized())
-  app.use('/rest/basket/:id/order', security.isAuthorized())
+  app.use('/rest/basket/:id', security.isAuthorized(), security.assertRestBasketIdMatchesSession())
+  app.use('/rest/basket/:id/order', security.isAuthorized(), security.assertRestBasketIdMatchesSession())
   /* Challenge evaluation before finale takes over */ // vuln-code-snippet hide-start
   app.post('/api/Feedbacks', verify.forgedFeedbackChallenge())
   /* Captcha verification before finale takes over */

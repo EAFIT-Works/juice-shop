@@ -7,6 +7,7 @@ import fs from 'node:fs'
 import crypto from 'node:crypto'
 import { type Request, type Response, type NextFunction } from 'express'
 import { type UserModel } from 'models/user'
+import { BasketItemModel } from '../models/basketitem'
 import expressJwt from 'express-jwt'
 import jwt from 'jsonwebtoken'
 import jws from 'jws'
@@ -182,6 +183,82 @@ export const appendUserId = () => {
     } catch (error: unknown) {
       res.status(401).json({ status: 'error', message: utils.getErrorMessage(error) })
     }
+  }
+}
+
+export const assertBasketOwnsBasketItems = () => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const tail = (req.url ?? '').split('?')[0].replace(/^\/+|\/+$/g, '')
+    const idMatch = /^(\d+)/.exec(tail)
+    const lineId = idMatch != null ? parseInt(idMatch[1], 10) : NaN
+
+    if (!Number.isNaN(lineId) || tail === '') {
+      let bid: number
+      try {
+        bid = authenticatedUsers.tokenMap[utils.jwtFrom(req)].bid as number
+      } catch (error: unknown) {
+        res.status(401).json({ status: 'error', message: utils.getErrorMessage(error) })
+        return
+      }
+
+      if (!Number.isNaN(lineId)) {
+        try {
+          const item = await BasketItemModel.findByPk(lineId)
+          if (item?.BasketId != null && Number(item.BasketId) !== Number(bid)) {
+            res.status(403).json({ error: 'Invalid BasketId' })
+            return
+          }
+        } catch (error: unknown) {
+          next(error)
+          return
+        }
+        next()
+        return
+      }
+
+      if (req.method === 'GET') {
+        const q = req.query.BasketId
+        if (q !== undefined && String(q) !== '' && Number(q) !== Number(bid)) {
+          res.status(403).json({ error: 'Invalid BasketId' })
+          return
+        }
+        if (q === undefined || String(q) === '') (req.query as Record<string, unknown>).BasketId = String(bid)
+      } else if (req.method === 'POST') {
+        if (!utils.jsonRawBodyBasketIdsAllowedForBid((req as Request & { rawBody?: unknown }).rawBody, bid)) {
+          res.status(403).json({ error: 'Invalid BasketId' })
+          return
+        }
+        const b = req.body?.BasketId
+        if (b !== undefined && b !== null && String(b) !== '' && String(b) !== 'undefined' && Number(b) !== Number(bid)) {
+          res.status(403).json({ error: 'Invalid BasketId' })
+          return
+        }
+      }
+      next()
+      return
+    }
+
+    next()
+  }
+}
+
+export const assertRestBasketIdMatchesSession = () => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const user = authenticatedUsers.from(req)
+    const id = req.params.id
+    if (user?.bid === undefined || user?.bid === null) {
+      res.status(401).json({ status: 'error', message: 'Missing basket scope for user' })
+      return
+    }
+    if (id === undefined || id === null || String(id) === '' || id === 'undefined' || id === 'null' || id === 'NaN') {
+      next()
+      return
+    }
+    if (Number(user.bid) !== Number(id)) {
+      res.status(403).json({ error: 'Invalid basket access' })
+      return
+    }
+    next()
   }
 }
 

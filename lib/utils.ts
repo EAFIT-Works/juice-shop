@@ -204,6 +204,22 @@ export const parseJsonCustom = (jsonString: string) => {
   return result
 }
 
+/** `parseJsonCustom` key order — duplicate `BasketId` keys (see addBasketItem). */
+export const jsonRawBodyBasketIdsAllowedForBid = (rawBody: unknown, bid: number): boolean => {
+  if (typeof rawBody !== 'string' || !rawBody.trim().startsWith('{')) return true
+  try {
+    for (const { key, value } of parseJsonCustom(rawBody.trim())) {
+      if (key !== 'BasketId') continue
+      const b = String(value)
+      if (b === '' || b === 'undefined' || b === 'null') continue
+      if (Number(b) !== Number(bid)) return false
+    }
+  } catch {
+    return true
+  }
+  return true
+}
+
 export const toSimpleIpAddress = (ipv6: string) => {
   if (startsWith(ipv6, '::ffff:')) {
     return ipv6.substr(7)
